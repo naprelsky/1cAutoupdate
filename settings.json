@@ -1,0 +1,25 @@
+{
+    "templatePath": "C:\\Downloads\\Template",
+    "platformPath": "C:\\Downloads\\Platform",
+    "unzipFiles": true,
+    "proxySettings": {
+        "host": "proxy.int",
+        "port": "3128",
+        "username": "",
+        "password": ""
+    },
+    "itsUsername": "",
+    "itsPassword": "",
+    "platform": {
+        "startVersion": "8.3.8.2054",
+        "lastDownloaded": ""
+    },
+    "configurations": [
+        {
+            "humanName": "Бухгалтерия предприятия 3.0",
+            "programName": "Accounting",
+            "startVersion": "3.0.51.25",
+            "lastDownloaded": ""
+        }
+    ]
+}
