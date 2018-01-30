@@ -1,20 +1,18 @@
 # -*- coding: utf-8 -*-
 
+import json
 import os
 from os.path import join as join_path
-from utils import log, updateapi
+from utils import log
 
 def init_settings():
     """Чтение настроек обновления из конфигурационного файла settings.json.
     @return: настройки обновления в виде словаря.
     """
-    import json
-
     settings_dict = dict()
     with open('settings.json', 'r', encoding='utf-8') as file_handle:
         # загружаем из файла данные в словарь settings_dict
         settings_dict = json.load(file_handle)
-
     return settings_dict
 
 
@@ -22,29 +20,9 @@ def save_settings(settings_dict):
     """Запись настроек обновления в конфигурационный файл settings.json.
     @param settings_dict: настройки обновления в виде словаря.
     """
-    import json
-
     with open('settings.json', 'w', encoding='utf-8') as file_handle:
-        # преобразовываем словарь data в unicode-строку и записываем в файл
+        # преобразовываем словарь в unicode-строку и записываем в файл
         file_handle.write(json.dumps(settings_dict, ensure_ascii=False))
-
-
-def rename_dir_unicode(directory, exclude_files=[]):
-    """Переименование файлов и каталогов в формат Unicode.
-    @param directory: родительская директория.
-    @param exclude_files: список файлов, которые не нужно переименовывать.
-    """
-    for item in os.scandir(directory):
-        if item.name in exclude_files:
-            continue
-
-        unicode_name = item.name.encode('cp437').decode('cp866')
-        if not item.name == unicode_name:
-            os.rename(join_path(directory, item.name), join_path(directory, unicode_name))
-
-        if os.path.isdir(item.path):
-            # Переименовываем вложенные каталоги и файлы в них
-            rename_dir_unicode(join_path(directory, unicode_name))
 
 
 def unzip_unicode(zip_path, directory=None, remove=True):
@@ -61,17 +39,22 @@ def unzip_unicode(zip_path, directory=None, remove=True):
         unzip_dir = directory
 
     upd_zip = zipfile.ZipFile(zip_path)
-    upd_zip.extractall(unzip_dir)
+    for name in upd_zip.namelist():
+        unicode_name = name.encode('cp437').decode('cp866').replace('/', '\\')
+        dirs = os.path.dirname(join_path(unzip_dir, unicode_name))
+        if dirs and not os.path.exists(dirs):
+            os.makedirs(dirs)
+
+        try:
+            with open(join_path(unzip_dir, unicode_name), 'wb') as file_handle:
+                file_handle.write(upd_zip.read(name))
+                file_handle.close()
+        except IOError as ex:
+            log.error('Ошибка распаковки файла.', str(ex))
     upd_zip.close()
 
-    # Приводим имена разархивированных файлов к формату Unicode
-    rename_dir_unicode(unzip_dir, os.path.basename(zip_path))
 
-    if remove:
-        os.remove(zip_path)
-
-
-def update_platform(connector: updateapi.ApiConnector, settings: dict):
+def update_platform(connector, settings: dict):
     """Скачивание текущей релизной версии платформы 1С.
     @param connector: коннектор к сервису 1С.
     @param settings: настройки обновления в виде словаря.
@@ -128,7 +111,7 @@ def update_platform(connector: updateapi.ApiConnector, settings: dict):
     log.info(' < Обновление платформы 1С завершено.')
 
 
-def update_configurations(connector: updateapi.ApiConnector, settings: dict):
+def update_configurations(connector, settings: dict):
     """Скачивание обновлений для всех конфигураций, указанных в настройке.
     @param connector: коннектор к сервису 1С.
     @param settings: настройки обновления в виде словаря.
@@ -188,5 +171,4 @@ def update_configurations(connector: updateapi.ApiConnector, settings: dict):
         log.info(' -- < Скачивание цепочки обновлений... Завершено!')
         log.info(' < Обновление конфигурации завершено.')
         configuration["lastDownloaded"] = upd_conf["configurationVersion"]
-
-    save_settings(settings)
+        save_settings(settings)

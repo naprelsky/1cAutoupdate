@@ -1,39 +1,33 @@
 # -*- coding: utf-8 -*-
 
-import urllib.request as request
-import ssl
+import base64
+import json
+import requests
+import urllib3
 from utils import log
+
+# Отключение предупреждений SSL
+urllib3.disable_warnings()
 
 class ApiConnector:
     """Объект для работы с API сервиса обновлений 1С"""
 
-    __api_url = "https://update-api.1c.ru/update-platform/programs"
-    __request_opener = None
-    __ssl_context = None
-    __request_body_templ = '{{"programName":"{0}","versionNumber":"{1}","platformVersion":"{2}","updateType":"{3}"}}'
+    API_URL = "https://update-api.1c.ru/update-platform/programs"
+    BODY_TEMPLATE = '{{"programName":"{0}","versionNumber":"{1}","platformVersion":"{2}","updateType":"{3}"}}'
+    PROXIES = ""
 
     def __init__(self, its_login, its_password, proxy_config=None):
-        self.__ssl_context = ssl.create_default_context()
-        self.__ssl_context.check_hostname = False
-        self.__ssl_context.verify_mode = ssl.CERT_NONE
-
         self.__its_login = its_login
         self.__its_password = its_password
 
-        self.__proxy_host = '' if proxy_config is None else proxy_config["host"]
-        self.__proxy_port = '' if proxy_config is None else proxy_config["port"]
-        self.__proxy_username = '' if proxy_config is None else proxy_config["username"]
-        self.__proxy_password = '' if proxy_config is None else proxy_config["password"]
+        proxy_host = '' if proxy_config is None else proxy_config["host"]
+        proxy_port = '' if proxy_config is None else proxy_config["port"]
+        proxy_username = '' if proxy_config is None else proxy_config["username"]
+        proxy_password = '' if proxy_config is None else proxy_config["password"]
 
-        if not self.__proxy_host == '':
-            proxy_url = 'http://{0}:{1}/'.format(self.__proxy_host, self.__proxy_port)
-            self.__proxy_handler = request.ProxyHandler({'http': proxy_url})
-
-            self.__proxy_auth_handler = request.ProxyBasicAuthHandler()
-            self.__proxy_auth_handler.add_password('realm', 'host', self.__proxy_username, self.__proxy_password)
-
-            __request_opener = request.build_opener(self.__proxy_handler, self.__proxy_auth_handler)
-            request.install_opener(__request_opener)
+        if not proxy_host == '':
+            proxy_url = 'http://{0}:{1}/'.format(proxy_host, proxy_port) if proxy_username == '' else 'http://{0}:{1}@{2}:{3}/'.format(proxy_username, proxy_password, proxy_host, proxy_port)
+            self.PROXIES = {'http': proxy_url, 'https': proxy_url}
 
 
     def check_platform_update(self, current_version):
@@ -49,17 +43,13 @@ class ApiConnector:
                      "recommended": false
                  }
         """
-        import json
-
-        request_url = "{0}/update/info".format(self.__api_url)
-        request_body = self.__request_body_templ.format('HRM', '3.1', current_version, 'NewPlatform')
-        http_request = request.Request(request_url, request_body.encode("utf-8"), {'Content-Type': 'application/json'})
+        request_url = "{0}/update/info".format(self.API_URL)
+        request_body = self.BODY_TEMPLATE.format('HRM', '3.1', current_version, 'NewPlatform')
 
         result = None
         try:
-            http_response = request.urlopen(http_request, context=self.__ssl_context)
-            resp_body = http_response.read()
-            resp_dict = json.loads(resp_body)
+            http_response = requests.post(request_url, data=request_body.encode("utf-8"), headers={'Content-Type': 'application/json'}, proxies=self.PROXIES, verify=False)
+            resp_dict = json.loads(http_response.text)
             result = resp_dict["platformUpdateResponse"]
         except Exception as ex:
             log.error('Ошибка при проверке обновлений платформы 1С.', str(ex))
@@ -85,17 +75,13 @@ class ApiConnector:
                     "programVersionUin": "de35e1b9-2e0d-4f32-8269-cf61a6010c04"
                  }
         """
-        import json
-
-        request_url = "{0}/update/info".format(self.__api_url)
-        request_body = self.__request_body_templ.format(conf_name, conf_version, '', 'NewProgramOrRedaction')
-        http_request = request.Request(request_url, request_body.encode("utf-8"), {'Content-Type': 'application/json'})
+        request_url = "{0}/update/info".format(self.API_URL)
+        request_body = self.BODY_TEMPLATE.format(conf_name, conf_version, '', 'NewProgramOrRedaction')
 
         result = None
         try:
-            http_response = request.urlopen(http_request, context=self.__ssl_context)
-            resp_body = http_response.read()
-            resp_dict = json.loads(resp_body)
+            http_response = requests.post(request_url, data=request_body.encode("utf-8"), headers={'Content-Type': 'application/json'}, proxies=self.PROXIES, verify=False)
+            resp_dict = json.loads(http_response.text)
             result = resp_dict["configurationUpdateResponse"]
         except Exception as ex:
             log.error('Ошибка при проверке обновлений конфигурации 1С.', str(ex))
@@ -109,22 +95,17 @@ class ApiConnector:
                                  возвращается при вызове check_platform_update().
         @return: прямая ссылка на скачивание.
         """
-        import json
-
-        request_url = "{0}/update/".format(self.__api_url)
+        request_url = "{0}/update/".format(self.API_URL)
 
         dict_body = {"upgradeSequence": None, "programVersionUin": None,
                      "platformDistributionUin": distribution_uin,
                      "login": self.__its_login, "password": self.__its_password}
         request_body = json.dumps(dict_body)
 
-        http_request = request.Request(request_url, request_body.encode("utf-8"), {'Content-Type': 'application/json'})
-
         result = None
         try:
-            http_response = request.urlopen(http_request, context=self.__ssl_context)
-            resp_body = http_response.read()
-            resp_dict = json.loads(resp_body)
+            http_response = requests.post(request_url, data=request_body.encode("utf-8"), headers={'Content-Type': 'application/json'}, proxies=self.PROXIES, verify=False)
+            resp_dict = json.loads(http_response.text)
             result = resp_dict["platformDistributionUrl"]
         except Exception as ex:
             log.error('Ошибка при получении ссылки на скачивание платформы 1С.', str(ex))
@@ -149,22 +130,17 @@ class ApiConnector:
                      "hashSum": "fEPkf6KV2CG2cWZ7674W5Q=="
                  }
         """
-        import json
-
-        request_url = "{0}/update/".format(self.__api_url)
+        request_url = "{0}/update/".format(self.API_URL)
 
         dict_body = {"upgradeSequence": [distribution_uin], "programVersionUin": program_uin,
                      "platformDistributionUin": None,
                      "login": self.__its_login, "password": self.__its_password}
         request_body = json.dumps(dict_body)
 
-        http_request = request.Request(request_url, request_body.encode("utf-8"), {'Content-Type': 'application/json'})
-
         resp_dict = None
         try:
-            http_response = request.urlopen(http_request, context=self.__ssl_context)
-            resp_body = http_response.read()
-            resp_dict = json.loads(resp_body)
+            http_response = requests.post(request_url, data=request_body.encode("utf-8"), headers={'Content-Type': 'application/json'}, proxies=self.PROXIES, verify=False)
+            resp_dict = json.loads(http_response.text)
         except Exception as ex:
             log.error('Ошибка при получении ссылки на скачивание конфигурации 1С.', str(ex))
 
@@ -180,18 +156,25 @@ class ApiConnector:
         @param url: адрес файла для скачивания.
         @return: двоичные данные файла
         """
-        import base64
+        import progressbar
 
         auth_str = "{0}:{1}".format(self.__its_login, self.__its_password)
         base64_auth_str = base64.b64encode(auth_str.encode("utf-8"))
         authorization = "Basic {0}".format(base64_auth_str.decode())
-        http_request = request.Request(url, None, {'User-Agent': '1C+Enterprise/8.3', 'Authorization': authorization})
 
         result = None
         try:
-            http_response = request.urlopen(http_request, context=self.__ssl_context)
-            result = http_response.read()
+            http_response = requests.get(url, headers={'User-Agent': '1C+Enterprise/8.3', 'Authorization': authorization}, proxies=self.PROXIES, verify=False, stream=True)
+            file_size = int(http_response.headers['Content-Length'])
+
+            result = []
+            chunk_size = 1024
+            progress_bar = progressbar.ProgressBar(maxval=file_size).start()
+            for chunk in http_response.iter_content(chunk_size):
+                result += chunk
+                progress_bar.update(len(result))
+            progress_bar.finish()
         except Exception as ex:
             log.error('Ошибка при скачивании файла обновления.', str(ex))
 
-        return result
+        return bytes(result)

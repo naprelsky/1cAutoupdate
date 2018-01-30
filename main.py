@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import sys as system
+import sys
 from utils import worker, log, updateapi
 
 def main(argv):
@@ -18,6 +18,9 @@ def main(argv):
                                        settings_dict["itsPassword"],
                                        settings_dict["proxySettings"])
 
+    # Поиск и скачивание новых версий конфигураций 1С
+    worker.update_configurations(connector, settings_dict)
+
     # Поиск и скачивание новой версии платформы 1С
     worker.update_platform(connector, settings_dict)
 
@@ -28,4 +31,4 @@ def main(argv):
     log.close()
 
 if __name__ == "__main__":
-    main(system.argv[1:])
+    main(sys.argv[1:])
